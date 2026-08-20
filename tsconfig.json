@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "noEmit": true,
+    "skipLibCheck": false
+  },
+  "include": [
+    "server.ts",
+    "app.tsx",
+    "client-*.ts",
+    "domain.ts",
+    "font-discovery.ts",
+    "*.test.ts",
+    "*.test.tsx",
+    "components/font-picker.tsx",
+    "components/preview-select.tsx",
+    "components/role-settings.tsx",
+    "components/ui/button.tsx"
+  ]
+}
