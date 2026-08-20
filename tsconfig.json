@@ -23,6 +23,7 @@
   "include": [
     "server.ts",
     "app.tsx",
+    "assets.d.ts",
     "client-*.ts",
     "domain.ts",
     "font-discovery.ts",
