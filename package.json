@@ -31,7 +31,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "bb-app": "0.39.0",
-    "jsdom": "26.1.0",
+    "jsdom": "29.1.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "typescript": "5.9.3",
