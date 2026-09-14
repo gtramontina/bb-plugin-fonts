@@ -280,9 +280,8 @@
 }
 
 .fonts-options {
-  position: absolute;
   z-index: 20;
-  inset: calc(100% - 0.15rem) 0 auto;
+  width: var(--radix-popover-trigger-width);
   max-height: 17rem;
   overflow-y: auto;
   padding: 0.3rem;
