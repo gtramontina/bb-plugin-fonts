@@ -28,6 +28,10 @@ discovery uses fonts on the device viewing BB, not fonts on the BB server.
 Desktop Chromium browsers provide the full picker after permission is granted;
 other browsers and mobile clients retain generic families and manual entry.
 
+In the Expo mobile app, Fonts applies to BB's web content inside the WebView.
+Native pairing, device-settings, and notification screens keep the mobile app's
+system typography because web plugins cannot style React Native components.
+
 Settings and scanned font metadata stay in that browser profile and origin.
 They are not synchronized with the desktop app or other devices, which may have
 different fonts installed. Changing a BB Connect handle creates a new browser
@@ -59,6 +63,8 @@ Fonts styles the BB document and plugin UI. Embedded websites, isolated browser
 content, canvas terminals, and third-party shadow roots may retain their own
 typography. Interface scale controls use bb's current typography variables and
 degrade to family/style controls if those variables are unavailable.
+Fixed-size renderers such as terminals, diffs, Monaco, and some editor roots may
+also keep their component-owned sizes.
 
 ## License
 

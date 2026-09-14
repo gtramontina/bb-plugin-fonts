@@ -32,6 +32,8 @@ without participating in bb's color-theme system.
 4. Store configuration and catalog metadata per browser profile and origin, independently from the desktop app and other devices.
 5. Clear cached catalog metadata when local-font permission is denied or revoked while preserving selected settings.
 6. Never hardcode a Connect handle, server URL, machine ID, or account-specific value.
+7. In the Expo app, affect web content inside the WebView only; native React Native screens remain outside the Plugin SDK styling boundary.
+8. Keep compact editable controls at least 16px to prevent iOS WebKit focus zoom.
 
 ## Controls
 
