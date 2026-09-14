@@ -553,9 +553,7 @@
   }
 
   .fonts-options {
-    position: fixed;
-    inset: auto 1rem 1rem;
-    max-height: min(55vh, 24rem);
+    max-height: min(17rem, 40dvh);
   }
 }
 

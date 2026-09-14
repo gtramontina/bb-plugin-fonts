@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent } from "@testing-library/react";
+import { fireEvent, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { CATALOG_STORAGE_KEY, CONFIG_STORAGE_KEY, saveCatalog } from "./client-store";
@@ -166,6 +166,22 @@ describe("Fonts settings UI", () => {
     expect(slot.getAllByRole("option")).toHaveLength(51); // Theme default plus 50 family results.
     fireEvent.change(picker, { target: { value: "serif" } });
     expect(slot.getAllByRole("option")[1]?.textContent).toContain("serifPortable CSS family");
+    slot.lifecycle.unmount();
+  });
+
+  it("allows incremental editing of numeric values before committing", async () => {
+    const app = await loadPluginApp(() => import("./app"));
+    const slot = renderSlot(app.settingsSections[0]!, {});
+    const interfaceRole = within(await slot.findByRole("region", { name: "Interface" }));
+    fireEvent.click(interfaceRole.getByRole("checkbox", { name: "Font size" }));
+    const input = interfaceRole.getByRole("spinbutton", { name: "Font size value" }) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+    expect(input.value).toBe("");
+    fireEvent.change(input, { target: { value: "2" } });
+    expect(input.value).toBe("2");
+    fireEvent.change(input, { target: { value: "20" } });
+    fireEvent.blur(input);
+    expect(input.value).toBe("20");
     slot.lifecycle.unmount();
   });
 });

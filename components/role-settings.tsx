@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   DEFAULT_CONFIG,
   type FontCatalog,
@@ -61,9 +61,20 @@ function clamp(value: number, minimum: number, maximum: number) {
 function NumberControl({ label, value, resolved, minimum, maximum, step, unit, fallback, disabled = false, onChange }: NumberControlProps) {
   const enabled = value !== null;
   const activeValue = value ?? clamp(Number.parseFloat(resolved) || fallback, minimum, maximum);
-  const update = (next: string) => {
-    const parsed = Number(next);
-    if (Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum) onChange(parsed);
+  const [inputValue, setInputValue] = useState(String(activeValue));
+
+  useEffect(() => {
+    setInputValue(String(activeValue));
+  }, [activeValue]);
+
+  const commit = () => {
+    const parsed = Number(inputValue);
+    if (inputValue.trim() && Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum) {
+      onChange(parsed);
+      setInputValue(String(parsed));
+    } else {
+      setInputValue(String(activeValue));
+    }
   };
   return (
     <div className="fonts-control">
@@ -75,7 +86,20 @@ function NumberControl({ label, value, resolved, minimum, maximum, step, unit, f
         {!enabled && <span>Theme · {resolved || "inherited"}</span>}
       </div>
       <span className="fonts-number-input" data-disabled={!enabled}>
-        <input aria-label={`${label} value`} type="number" min={minimum} max={maximum} step={step} value={activeValue} disabled={!enabled || disabled} onChange={(event) => update(event.target.value)} />
+        <input
+          aria-label={`${label} value`}
+          type="number"
+          min={minimum}
+          max={maximum}
+          step={step}
+          value={inputValue}
+          disabled={!enabled || disabled}
+          onChange={(event) => setInputValue(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+        />
         <span>{unit}</span>
       </span>
     </div>
