@@ -22,6 +22,21 @@ describe("font settings domain", () => {
     });
   });
 
+  it("migrates legacy families as named fonts and validates generic choices", () => {
+    const migrated = normalizeConfig({
+      version: 1,
+      roles: { interface: { family: "serif" } },
+    });
+    expect(migrated.version).toBe(2);
+    expect(migrated.roles.interface).toMatchObject({ family: "serif", familyKind: "named" });
+
+    const generic = normalizeConfig({
+      version: 2,
+      roles: { interface: { family: "system-ui", familyKind: "generic" } },
+    });
+    expect(generic.roles.interface).toMatchObject({ family: "system-ui", familyKind: "generic" });
+  });
+
   it("deduplicates and cleans local font families", () => {
     expect(normalizeCatalog([
       { family: "Inter", style: "Regular" },
@@ -59,6 +74,18 @@ describe("font settings domain", () => {
     expect(plan.rootProperties["--font-weight-semibold"]).toBe("600");
     expect(plan.rules).toContain("code,pre,kbd,samp");
     expect(plan.rules).toContain("font-size:13px!important");
+  });
+
+  it("emits generic families as CSS keywords and named families as strings", () => {
+    const plan = buildTypographyPlan({
+      roles: {
+        interface: { family: "system-ui", familyKind: "generic" },
+        code: { family: "system-ui", familyKind: "named" },
+        serif: {},
+      },
+    });
+    expect(plan.rootProperties["--font-sans"]).toBe("system-ui, sans-serif");
+    expect(plan.rootProperties["--font-mono"]).toBe('"system-ui", monospace');
   });
 
   it("scales from the active theme instead of replacing its hierarchy", () => {

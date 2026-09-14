@@ -2,7 +2,7 @@
 import { fireEvent } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
-import { CONFIG_STORAGE_KEY } from "./client-store";
+import { CATALOG_STORAGE_KEY, CONFIG_STORAGE_KEY, saveCatalog } from "./client-store";
 
 describe("Fonts settings UI", () => {
   beforeEach(() => {
@@ -12,6 +12,8 @@ describe("Fonts settings UI", () => {
       return 1;
     });
     vi.stubGlobal("cancelAnimationFrame", () => undefined);
+    Object.defineProperty(window, "isSecureContext", { configurable: true, value: true });
+    Object.defineProperty(navigator, "permissions", { configurable: true, value: undefined });
     Object.defineProperty(window, "queryLocalFonts", {
       configurable: true,
       value: vi.fn(async () => [
@@ -49,6 +51,7 @@ describe("Fonts settings UI", () => {
     const slot = renderSlot(app.settingsSections[0]!, {});
     expect(slot.queryByText("Advanced typography")).toBeNull();
     expect(slot.queryByText("Enter font name manually")).toBeNull();
+    expect(slot.getAllByRole("button", { name: "Reset role" }).every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
     expect(slot.queryByLabelText("Font size slider")).toBeNull();
     expect(await slot.findAllByLabelText("Font size value")).toHaveLength(3);
     expect(slot.getAllByLabelText("Letter spacing value")).toHaveLength(3);
@@ -65,6 +68,104 @@ describe("Fonts settings UI", () => {
     fireEvent.keyDown(picker, { key: "Enter" });
     expect((picker as HTMLInputElement).value).toBe("Custom Sans");
     expect(slot.getByText("Manual family")).toBeTruthy();
+    slot.lifecycle.unmount();
+  });
+
+  it("offers generic families when installed-font discovery is unsupported", async () => {
+    Object.defineProperty(window, "queryLocalFonts", { configurable: true, value: undefined });
+    const app = await loadPluginApp(() => import("./app"));
+    const slot = renderSlot(app.settingsSections[0]!, {});
+    expect(await slot.findByText("Installed fonts unavailable")).toBeTruthy();
+    expect(slot.queryByRole("button", { name: "Allow font access" })).toBeNull();
+    const picker = slot.getAllByRole("combobox")[0]!;
+    fireEvent.focus(picker);
+    expect(slot.getByText("Generic families")).toBeTruthy();
+    expect(slot.getByRole("group", { name: "Generic families" })).toBeTruthy();
+    fireEvent.blur(picker, { relatedTarget: slot.getByRole("button", { name: "Save settings" }) });
+    expect(picker.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.focus(picker);
+    fireEvent.click(slot.getByText("system-ui"));
+    expect((picker as HTMLInputElement).value).toBe("system-ui");
+    expect(slot.getByText("Generic family")).toBeTruthy();
+    slot.lifecycle.unmount();
+  });
+
+  it("explains insecure browser origins without offering a scan", async () => {
+    Object.defineProperty(window, "isSecureContext", { configurable: true, value: false });
+    const app = await loadPluginApp(() => import("./app"));
+    const slot = renderSlot(app.settingsSections[0]!, {});
+    expect(await slot.findByText("Secure connection required")).toBeTruthy();
+    expect(slot.queryByRole("button", { name: "Allow font access" })).toBeNull();
+    slot.lifecycle.unmount();
+  });
+
+  it("distinguishes policy blocking from unexpected scan failures", async () => {
+    Object.defineProperty(window, "queryLocalFonts", {
+      configurable: true,
+      value: vi.fn(async () => { throw new DOMException("blocked", "SecurityError"); }),
+    });
+    const app = await loadPluginApp(() => import("./app"));
+    const blocked = renderSlot(app.settingsSections[0]!, {});
+    fireEvent.click(await blocked.findByRole("button", { name: "Allow font access" }));
+    expect(await blocked.findByText("Font access blocked")).toBeTruthy();
+    blocked.lifecycle.unmount();
+
+    Object.defineProperty(window, "queryLocalFonts", {
+      configurable: true,
+      value: vi.fn(async () => { throw new Error("Font service unavailable"); }),
+    });
+    const failed = renderSlot(app.settingsSections[0]!, {});
+    fireEvent.click(await failed.findByRole("button", { name: "Allow font access" }));
+    expect(await failed.findByText("Could not load installed fonts")).toBeTruthy();
+    expect(failed.getByText("Font service unavailable")).toBeTruthy();
+    failed.lifecycle.unmount();
+  });
+
+  it("clears cached font metadata when access is denied", async () => {
+    saveCatalog({ version: 1, scannedAt: 1, families: [{ family: "Inter", styles: ["Regular"] }] });
+    Object.defineProperty(window, "queryLocalFonts", {
+      configurable: true,
+      value: vi.fn(async () => { throw new DOMException("denied", "NotAllowedError"); }),
+    });
+    const app = await loadPluginApp(() => import("./app"));
+    const slot = renderSlot(app.settingsSections[0]!, {});
+    fireEvent.click(await slot.findByRole("button", { name: "Rescan fonts" }));
+    expect(await slot.findByText("Font access denied")).toBeTruthy();
+    expect(localStorage.getItem(CATALOG_STORAGE_KEY)).toBeNull();
+    slot.lifecycle.unmount();
+  });
+
+  it("clears cached metadata when a prior permission returns to prompt", async () => {
+    saveCatalog({ version: 1, scannedAt: 1, families: [{ family: "Inter", styles: ["Regular"] }] });
+    const status = {
+      state: "prompt" as PermissionState,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: { query: vi.fn(async () => status) },
+    });
+    const app = await loadPluginApp(() => import("./app"));
+    const slot = renderSlot(app.settingsSections[0]!, {});
+    expect(await slot.findByText("No font catalog yet")).toBeTruthy();
+    expect(localStorage.getItem(CATALOG_STORAGE_KEY)).toBeNull();
+    slot.lifecycle.unmount();
+  });
+
+  it("ranks generic matches and shares one result cap across groups", async () => {
+    saveCatalog({
+      version: 1,
+      scannedAt: 1,
+      families: Array.from({ length: 60 }, (_, index) => ({ family: `Installed ${index}`, styles: ["Regular"] })),
+    });
+    const app = await loadPluginApp(() => import("./app"));
+    const slot = renderSlot(app.settingsSections[0]!, {});
+    const picker = slot.getAllByRole("combobox")[0]!;
+    fireEvent.focus(picker);
+    expect(slot.getAllByRole("option")).toHaveLength(51); // Theme default plus 50 family results.
+    fireEvent.change(picker, { target: { value: "serif" } });
+    expect(slot.getAllByRole("option")[1]?.textContent).toContain("serifPortable CSS family");
     slot.lifecycle.unmount();
   });
 });

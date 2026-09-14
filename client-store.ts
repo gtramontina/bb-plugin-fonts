@@ -6,13 +6,15 @@ import {
   type FontsConfig,
 } from "./domain";
 
-export const CONFIG_STORAGE_KEY = "bb-plugin-fonts:config:v1";
+export const CONFIG_STORAGE_KEY = "bb-plugin-fonts:config:v2";
+export const LEGACY_CONFIG_STORAGE_KEY = "bb-plugin-fonts:config:v1";
 export const CATALOG_STORAGE_KEY = "bb-plugin-fonts:catalog:v1";
-export const CHANNEL_NAME = "bb-plugin-fonts:v1";
+export const CHANNEL_NAME = "bb-plugin-fonts:v2";
 
 interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
 }
 
 function readJson(storage: StorageLike, key: string): unknown {
@@ -25,7 +27,8 @@ function readJson(storage: StorageLike, key: string): unknown {
 }
 
 export function loadConfig(storage: StorageLike = localStorage): FontsConfig {
-  const value = readJson(storage, CONFIG_STORAGE_KEY);
+  const current = readJson(storage, CONFIG_STORAGE_KEY);
+  const value = current ?? readJson(storage, LEGACY_CONFIG_STORAGE_KEY);
   return value === null ? normalizeConfig(DEFAULT_CONFIG) : normalizeConfig(value);
 }
 
@@ -44,4 +47,12 @@ export function saveCatalog(catalog: FontCatalog, storage: StorageLike = localSt
   if (!normalized) throw new Error("Invalid font catalog");
   storage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(normalized));
   return normalized;
+}
+
+export function clearCatalog(storage: StorageLike = localStorage) {
+  try {
+    storage.removeItem?.(CATALOG_STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
 }

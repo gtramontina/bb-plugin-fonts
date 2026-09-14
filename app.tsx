@@ -9,7 +9,7 @@ import {
   subscribeExternalSave,
   subscribeThemeChange,
 } from "./client-runtime";
-import { loadCatalog, loadConfig, saveCatalog, saveConfig } from "./client-store";
+import { clearCatalog, loadCatalog, loadConfig, saveCatalog, saveConfig } from "./client-store";
 import type { ResolvedRoles } from "./client-typography";
 import {
   DEFAULT_CONFIG,
@@ -19,7 +19,14 @@ import {
   type FontCatalog,
   type FontsConfig,
 } from "./domain";
-import { discoverLocalFonts, isElectronClient, supportsLocalFontAccess } from "./font-discovery";
+import {
+  classifyFontAccessError,
+  discoverLocalFonts,
+  getFontAccessState,
+  isElectronClient,
+  watchLocalFontPermission,
+  type FontAccessState,
+} from "./font-discovery";
 import { RoleSettings } from "./components/role-settings";
 import { Button } from "./components/ui/button";
 import "./app.css";
@@ -39,6 +46,28 @@ function getWriterId() {
   return created;
 }
 
+function fontAccessCopy(state: FontAccessState, desktop: boolean) {
+  switch (state) {
+    case "unsupported":
+      return { title: "Installed fonts unavailable", description: "This browser cannot list local fonts. Choose a generic family or type any family name." };
+    case "insecure":
+      return { title: "Secure connection required", description: "Installed-font discovery requires HTTPS or localhost. Generic and manually entered families remain available." };
+    case "denied":
+      return { title: "Font access denied", description: "Allow local-font access in this browser's site settings, then try again. Generic and manual choices remain available." };
+    case "blocked":
+      return { title: "Font access blocked", description: "Browser settings or page policy currently block local-font access. Enable it if available, then try again." };
+    case "failed":
+      return { title: "Could not load installed fonts", description: "Try again, or choose a generic family or type any family name." };
+    default:
+      return {
+        title: "Installed fonts",
+        description: desktop
+          ? "Load the fonts installed on this device. The catalog stays on this client."
+          : "Allow this browser to list local fonts. Names remain on this client.",
+      };
+  }
+}
+
 function FontsSettings() {
   const [saved, setSaved] = useState<FontsConfig>(() => loadConfig());
   const [draft, setDraft] = useState<FontsConfig>(() => loadConfig());
@@ -47,10 +76,11 @@ function FontsSettings() {
   const [status, setStatus] = useState("");
   const [scanStatus, setScanStatus] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [fontAccessState, setFontAccessState] = useState<FontAccessState>(() => getFontAccessState());
   const [externalSave, setExternalSave] = useState<FontsConfig | null>(null);
   const dirty = !configsEqual(saved, draft);
-  const discoverySupported = supportsLocalFontAccess();
   const desktop = isElectronClient();
+  const accessCopy = fontAccessCopy(fontAccessState, desktop);
   const advancedSupported = typeof document === "undefined"
     || Boolean(getComputedStyle(document.documentElement).getPropertyValue("--text-sm").trim());
 
@@ -65,6 +95,28 @@ function FontsSettings() {
     return () => {
       cancelAnimationFrame(frame);
       unsubscribeTheme();
+    };
+  }, []);
+
+  useEffect(() => {
+    let dispose: () => void = () => undefined;
+    let active = true;
+    void watchLocalFontPermission((permission) => {
+      if (!active) return;
+      if (permission === "denied" || permission === "prompt") {
+        clearCatalog();
+        setCatalog(null);
+        setFontAccessState(permission === "denied" ? "blocked" : getFontAccessState());
+      } else if (permission === "granted" && getFontAccessState() === "available") {
+        setFontAccessState("available");
+      }
+    }).then((nextDispose) => {
+      if (active) dispose = nextDispose;
+      else nextDispose();
+    });
+    return () => {
+      active = false;
+      dispose();
     };
   }, []);
 
@@ -98,12 +150,16 @@ function FontsSettings() {
         setScanStatus(`${discovered.families.length} families loaded for this session; the catalog could not be cached.`);
       }
       setCatalog(next);
+      setFontAccessState("available");
       if (!cacheFailed) setScanStatus(`${next.families.length} families loaded`);
     } catch (error) {
-      const denied = error instanceof DOMException && error.name === "NotAllowedError";
-      setScanStatus(denied
-        ? "Font access was denied. Manual entry remains available; use Try again when ready."
-        : error instanceof Error ? error.message : String(error));
+      const nextState = classifyFontAccessError(error);
+      setFontAccessState(nextState);
+      if (nextState === "denied" || nextState === "blocked") {
+        clearCatalog();
+        setCatalog(null);
+      }
+      setScanStatus(nextState === "failed" ? error instanceof Error ? error.message : String(error) : "");
     } finally {
       setScanning(false);
     }
@@ -144,18 +200,14 @@ function FontsSettings() {
       </div>
 
       <div className="fonts-discovery">
-        <div>
-          <strong>{discoverySupported ? "Installed fonts" : "Manual font selection"}</strong>
-          <p>{discoverySupported
-            ? desktop
-              ? "Load the fonts installed on this Mac. The catalog stays on this client."
-              : "Allow this browser to list local fonts. Names remain on this client."
-            : "This client cannot list local fonts. Enter a family name manually in any role below."}</p>
-          {scanStatus && <p className="fonts-scan-result" role="status">{scanStatus}</p>}
+        <div aria-live="polite">
+          <strong>{accessCopy.title}</strong>
+          <p>{accessCopy.description}</p>
+          {scanStatus && <p className="fonts-scan-result">{scanStatus}</p>}
         </div>
-        {discoverySupported && (
+        {!(["unsupported", "insecure"] as FontAccessState[]).includes(fontAccessState) && (
           <Button type="button" onClick={() => void scan()} disabled={scanning}>
-            {scanning ? "Loading…" : catalog ? "Rescan fonts" : desktop ? "Load installed fonts" : "Allow font access"}
+            {scanning ? "Loading…" : fontAccessState === "available" ? catalog ? "Rescan fonts" : desktop ? "Load installed fonts" : "Allow font access" : "Try again"}
           </Button>
         )}
       </div>

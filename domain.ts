@@ -1,9 +1,21 @@
 export const ROLE_IDS = ["interface", "code", "serif"] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 export type FontStyle = "normal" | "italic" | "oblique";
+export const GENERIC_FAMILIES = [
+  "system-ui",
+  "sans-serif",
+  "serif",
+  "monospace",
+  "ui-sans-serif",
+  "ui-serif",
+  "ui-monospace",
+] as const;
+export type GenericFamily = (typeof GENERIC_FAMILIES)[number];
+export type FontFamilyKind = "named" | "generic";
 
 export interface RoleConfig {
   family: string | null;
+  familyKind: FontFamilyKind;
   size: number | null;
   weight: number | null;
   style: FontStyle | null;
@@ -12,7 +24,7 @@ export interface RoleConfig {
 }
 
 export interface FontsConfig {
-  version: 1;
+  version: 2;
   revision: number;
   writer: string;
   roles: Record<RoleId, RoleConfig>;
@@ -41,6 +53,7 @@ export interface TypographyPlan {
 
 const EMPTY_ROLE: RoleConfig = {
   family: null,
+  familyKind: "named",
   size: null,
   weight: null,
   style: null,
@@ -49,7 +62,7 @@ const EMPTY_ROLE: RoleConfig = {
 };
 
 export const DEFAULT_CONFIG: FontsConfig = {
-  version: 1,
+  version: 2,
   revision: 0,
   writer: "",
   roles: {
@@ -84,11 +97,16 @@ function normalizeRole(value: unknown): RoleConfig {
   const family = typeof input.family === "string" && input.family.trim()
     ? input.family.trim().slice(0, 200)
     : null;
+  const familyKind = input.familyKind === "generic" && family
+    && GENERIC_FAMILIES.includes(family as GenericFamily)
+    ? "generic"
+    : "named";
   const style = input.style === "normal" || input.style === "italic" || input.style === "oblique"
     ? input.style
     : null;
   return {
     family,
+    familyKind,
     size: normalizeNumber(input.size, "size"),
     weight: normalizeNumber(input.weight, "weight"),
     style,
@@ -105,7 +123,7 @@ export function normalizeConfig(value: unknown): FontsConfig {
     ? input.roles as Partial<Record<RoleId, RoleConfig>>
     : {};
   return {
-    version: 1,
+    version: 2,
     revision: typeof input.revision === "number" && Number.isFinite(input.revision)
       ? Math.max(0, Math.floor(input.revision))
       : 0,
@@ -239,8 +257,12 @@ export function buildTypographyPlan(
   const config = normalizeConfig(configValue);
   const rootProperties: Record<string, string> = {};
   for (const role of ROLE_IDS) {
-    const family = config.roles[role].family;
-    if (family) rootProperties[ROOT_FONT_TOKENS[role]] = `${JSON.stringify(family)}, ${role === "code" ? "monospace" : role === "serif" ? "serif" : "sans-serif"}`;
+    const roleConfig = config.roles[role];
+    const family = roleConfig.family;
+    if (family) {
+      const primary = roleConfig.familyKind === "generic" ? family : JSON.stringify(family);
+      rootProperties[ROOT_FONT_TOKENS[role]] = `${primary}, ${role === "code" ? "monospace" : role === "serif" ? "serif" : "sans-serif"}`;
+    }
   }
 
   const ui = config.roles.interface;

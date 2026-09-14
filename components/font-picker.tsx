@@ -1,11 +1,26 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { searchFamilies, type FontCatalog, type RoleId } from "../domain";
+import {
+  GENERIC_FAMILIES,
+  searchFamilies,
+  type FontCatalog,
+  type FontFamilyKind,
+  type RoleId,
+} from "../domain";
 
 interface FontPickerProps {
   role: RoleId;
   value: string | null;
+  familyKind: FontFamilyKind;
   catalog: FontCatalog | null;
-  onChange(value: string | null): void;
+  onChange(value: string | null, familyKind: FontFamilyKind): void;
+}
+
+interface PickerOption {
+  family: string;
+  familyKind: FontFamilyKind;
+  styles: string[];
+  group?: "Generic families" | "Installed on this device";
+  manual?: boolean;
 }
 
 const fallbacks: Record<RoleId, string> = {
@@ -22,19 +37,36 @@ export function SelectChevron({ open }: { open: boolean }) {
   );
 }
 
-export function FontPicker({ role, value, catalog, onChange }: FontPickerProps) {
+export function FontPicker({ role, value, familyKind, catalog, onChange }: FontPickerProps) {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const results = searchFamilies(catalog?.families ?? [], query);
   const trimmedQuery = query.trim();
-  const hasExactMatch = results.some(({ family }) => family.toLocaleLowerCase() === trimmedQuery.toLocaleLowerCase());
-  const options: Array<{ family: string; styles: string[]; manual?: boolean }> = [
-    { family: "", styles: [] },
-    ...results,
-    ...(trimmedQuery && !hasExactMatch ? [{ family: trimmedQuery, styles: [], manual: true }] : []),
+  const normalizedQuery = trimmedQuery.toLocaleLowerCase();
+  const rankedGenericFamilies = searchFamilies(
+    GENERIC_FAMILIES.map((family) => ({ family, styles: [] })),
+    query,
+    GENERIC_FAMILIES.length,
+  );
+  const rankedInstalledFamilies = searchFamilies(catalog?.families ?? [], query);
+  const hasExactMatch = [...rankedGenericFamilies, ...rankedInstalledFamilies]
+    .some(({ family }) => family.toLocaleLowerCase() === normalizedQuery);
+  const familyResultLimit = trimmedQuery && !hasExactMatch ? 49 : 50;
+  const genericOptions: PickerOption[] = rankedGenericFamilies
+    .slice(0, familyResultLimit)
+    .map(({ family }) => ({ family, familyKind: "generic", styles: [], group: "Generic families" }));
+  const installedOptions: PickerOption[] = rankedInstalledFamilies
+    .slice(0, familyResultLimit - genericOptions.length)
+    .map(({ family, styles }) => ({ family, familyKind: "named", styles, group: "Installed on this device" }));
+  const options: PickerOption[] = [
+    { family: "", familyKind: "named", styles: [] },
+    ...genericOptions,
+    ...installedOptions,
+    ...(trimmedQuery && !hasExactMatch
+      ? [{ family: trimmedQuery, familyKind: "named" as const, styles: [], manual: true }]
+      : []),
   ];
   const selectedAvailable = value === null || catalog === null || catalog.families.some(
     ({ family }) => family.toLocaleLowerCase() === value.toLocaleLowerCase(),
@@ -48,14 +80,47 @@ export function FontPicker({ role, value, catalog, onChange }: FontPickerProps) 
     return () => document.removeEventListener("pointerdown", close);
   }, []);
 
-  const select = (family: string) => {
-    onChange(family || null);
+  const select = (option: PickerOption) => {
+    onChange(option.family || null, option.familyKind);
     setQuery("");
     setOpen(false);
   };
 
+  const renderOption = (option: PickerOption, index: number) => {
+    const selected = option.family
+      ? option.family === value && option.familyKind === familyKind
+      : value === null;
+    return (
+      <div
+        id={`${id}-option-${index}`}
+        key={`${option.manual ? "manual:" : `${option.familyKind}:`}${option.family || "theme"}`}
+        role="option"
+        aria-selected={selected}
+        className="fonts-option"
+        data-active={index === activeIndex}
+        onPointerMove={() => setActiveIndex(index)}
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={() => select(option)}
+      >
+        <span>
+          <span style={option.familyKind === "named" && option.family ? { fontFamily: `${JSON.stringify(option.family)}, ${fallbacks[role]}` } : option.family ? { fontFamily: `${option.family}, ${fallbacks[role]}` } : undefined}>
+            {option.manual ? `Use “${option.family}”` : option.family || "Theme default"}
+          </span>
+          {option.manual
+            ? <small>Manual family name</small>
+            : option.familyKind === "generic"
+              ? <small>Portable CSS family</small>
+              : option.family && option.styles.length > 0 && <small>{option.styles.length} {option.styles.length === 1 ? "style" : "styles"}</small>}
+        </span>
+        {selected && <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3 3 7-7" /></svg>}
+      </div>
+    );
+  };
+
   return (
-    <div className="fonts-picker" ref={rootRef}>
+    <div className="fonts-picker" ref={rootRef} onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+    }}>
       <label htmlFor={`${id}-input`} className="fonts-field-label">Font family</label>
       <div className="fonts-combobox">
         <input
@@ -84,7 +149,7 @@ export function FontPicker({ role, value, catalog, onChange }: FontPickerProps) 
             } else if (event.key === "Enter" && open) {
               event.preventDefault();
               const index = activeIndex === 0 && trimmedQuery ? 1 : activeIndex;
-              select(options[index]?.family ?? "");
+              select(options[index] ?? options[0]!);
             } else if (event.key === "Escape") {
               setOpen(false);
               setQuery("");
@@ -98,40 +163,27 @@ export function FontPicker({ role, value, catalog, onChange }: FontPickerProps) 
 
       {open && (
         <div className="fonts-options" id={`${id}-listbox`} role="listbox">
-          {options.map((option, index) => {
-            const family = option.family;
-            const selected = family ? family === value : value === null;
-            return (
-              <div
-                id={`${id}-option-${index}`}
-                key={`${option.manual ? "manual:" : "family:"}${family || "theme"}`}
-                role="option"
-                aria-selected={selected}
-                className="fonts-option"
-                data-active={index === activeIndex}
-                onPointerMove={() => setActiveIndex(index)}
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={() => select(family)}
-              >
-                <span>
-                  <span style={family ? { fontFamily: `${JSON.stringify(family)}, ${fallbacks[role]}` } : undefined}>
-                    {option.manual ? `Use “${family}”` : family || "Theme default"}
-                  </span>
-                  {option.manual
-                    ? <small>Manual family name</small>
-                    : family && option.styles.length > 0 && <small>{option.styles.length} {option.styles.length === 1 ? "style" : "styles"}</small>}
-                </span>
-                {selected && <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3 3 7-7" /></svg>}
-              </div>
-            );
-          })}
+          {renderOption(options[0]!, 0)}
+          {genericOptions.length > 0 && (
+            <div role="group" aria-labelledby={`${id}-generic-label`}>
+              <div className="fonts-option-group" id={`${id}-generic-label`}>Generic families</div>
+              {genericOptions.map((option, offset) => renderOption(option, offset + 1))}
+            </div>
+          )}
+          {installedOptions.length > 0 && (
+            <div role="group" aria-labelledby={`${id}-installed-label`}>
+              <div className="fonts-option-group" id={`${id}-installed-label`}>Installed on this device</div>
+              {installedOptions.map((option, offset) => renderOption(option, offset + 1 + genericOptions.length))}
+            </div>
+          )}
+          {options.at(-1)?.manual && renderOption(options.at(-1)!, options.length - 1)}
         </div>
       )}
 
       <div className="fonts-picker-meta">
         {value && (
-          <span className={catalog && selectedAvailable ? "fonts-available" : catalog ? "fonts-unavailable" : "fonts-picker-hint"}>
-            {catalog ? selectedAvailable ? "Installed" : "Not currently available" : "Manual family"}
+          <span className={familyKind === "generic" ? "fonts-picker-hint" : catalog && selectedAvailable ? "fonts-available" : catalog ? "fonts-unavailable" : "fonts-picker-hint"}>
+            {familyKind === "generic" ? "Generic family" : catalog ? selectedAvailable ? "Installed" : "Not currently available" : "Manual family"}
           </span>
         )}
         {!value && <span className="fonts-picker-hint">Search installed fonts or type any family name</span>}
