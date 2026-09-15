@@ -6,7 +6,7 @@
   "packageManager": "npm@11.16.0",
   "scripts": {
     "build": "bb plugin build",
-    "test": "vitest run",
+    "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
