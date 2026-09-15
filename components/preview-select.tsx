@@ -1,6 +1,7 @@
 import { useId, useState, type CSSProperties } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { SelectChevron } from "./font-picker";
+import { keepOpenOnScrollbar } from "./popover-dismiss";
 
 export interface PreviewOption {
   value: string;
@@ -78,6 +79,7 @@ export function PreviewSelect({ label, value, options, disabled = false, onChang
           sideOffset={4}
           collisionPadding={12}
           onOpenAutoFocus={(event) => event.preventDefault()}
+          onPointerDownOutside={keepOpenOnScrollbar}
         >
           {options.map((option, index) => (
             <div

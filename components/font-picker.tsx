@@ -1,5 +1,6 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
+import { keepOpenOnScrollbar } from "./popover-dismiss";
 import {
   GENERIC_FAMILIES,
   searchFamilies,
@@ -20,7 +21,6 @@ interface PickerOption {
   family: string;
   familyKind: FontFamilyKind;
   styles: string[];
-  group?: "Generic families" | "Installed on this device";
   manual?: boolean;
 }
 
@@ -40,6 +40,8 @@ export function SelectChevron({ open }: { open: boolean }) {
 
 export function FontPicker({ role, value, familyKind, catalog, onChange }: FontPickerProps) {
   const id = useId();
+  const picker = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -56,10 +58,10 @@ export function FontPicker({ role, value, familyKind, catalog, onChange }: FontP
   const familyResultLimit = trimmedQuery && !hasExactMatch ? 49 : 50;
   const genericOptions: PickerOption[] = rankedGenericFamilies
     .slice(0, familyResultLimit)
-    .map(({ family }) => ({ family, familyKind: "generic", styles: [], group: "Generic families" }));
+    .map(({ family }) => ({ family, familyKind: "generic", styles: [] }));
   const installedOptions: PickerOption[] = rankedInstalledFamilies
     .slice(0, familyResultLimit - genericOptions.length)
-    .map(({ family, styles }) => ({ family, familyKind: "named", styles, group: "Installed on this device" }));
+    .map(({ family, styles }) => ({ family, familyKind: "named", styles }));
   const options: PickerOption[] = [
     { family: "", familyKind: "named", styles: [] },
     ...genericOptions,
@@ -111,8 +113,13 @@ export function FontPicker({ role, value, familyKind, catalog, onChange }: FontP
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <div className="fonts-picker" onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+      <div className="fonts-picker" ref={picker} onBlur={(event) => {
+        const next = event.relatedTarget as Node | null;
+        // A scrollbar press blurs the input without focusing anything; leave those to
+        // the dismissable layer so dragging the list's scrollbar keeps it open.
+        if (!next) return;
+        if (event.currentTarget.contains(next) || list.current?.contains(next)) return;
+        setOpen(false);
       }}>
         <label htmlFor={`${id}-input`} className="fonts-field-label">Font family</label>
         <Popover.Anchor asChild>
@@ -127,6 +134,7 @@ export function FontPicker({ role, value, familyKind, catalog, onChange }: FontP
               placeholder="Search installed fonts or enter a family name"
               value={open ? query : value ?? "Theme default"}
               onFocus={() => setOpen(true)}
+              onClick={() => setOpen(true)}
               onChange={(event) => {
                 setQuery(event.target.value);
                 setActiveIndex(0);
@@ -168,6 +176,7 @@ export function FontPicker({ role, value, familyKind, catalog, onChange }: FontP
 
       <Popover.Portal>
         <Popover.Content
+          ref={list}
           className="fonts-options"
           id={`${id}-listbox`}
           role="listbox"
@@ -175,6 +184,12 @@ export function FontPicker({ role, value, familyKind, catalog, onChange }: FontP
           sideOffset={4}
           collisionPadding={12}
           onOpenAutoFocus={(event) => event.preventDefault()}
+          onPointerDownOutside={keepOpenOnScrollbar}
+          onInteractOutside={(event) => {
+            // The combobox is an anchor, not a trigger, so Radix would otherwise
+            // dismiss the list on the same click that opens it.
+            if (picker.current?.contains(event.target as Node)) event.preventDefault();
+          }}
         >
           {renderOption(options[0]!, 0)}
           {genericOptions.length > 0 && (
