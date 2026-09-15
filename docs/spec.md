@@ -42,7 +42,7 @@ without participating in bb's color-theme system.
 3. Style: theme default, Normal, Italic, or Oblique.
 4. Line height: unitless 1.0–2.0 in 0.01 steps.
 5. Letter spacing: -0.10em–0.20em in 0.005em steps.
-6. Pair numeric sliders with editable values, keyboard operation, resolved theme context, per-role reset, and global reset.
+6. Offer numeric values as editable inputs that snap to their increment on commit, with keyboard operation, resolved theme context, per-role reset, and global reset. Do not use sliders.
 
 ## Privacy and persistence
 

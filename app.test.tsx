@@ -184,4 +184,40 @@ describe("Fonts settings UI", () => {
     expect(input.value).toBe("20");
     slot.lifecycle.unmount();
   });
+
+  it("snaps committed numeric values to their increment", async () => {
+    const app = await loadPluginApp(() => import("./app"));
+    const slot = renderSlot(app.settingsSections[0]!, {});
+    const interfaceRole = within(await slot.findByRole("region", { name: "Interface" }));
+    fireEvent.click(interfaceRole.getByRole("checkbox", { name: "Font size" }));
+    const size = interfaceRole.getByRole("spinbutton", { name: "Font size value" }) as HTMLInputElement;
+    fireEvent.change(size, { target: { value: "17.3" } });
+    fireEvent.blur(size);
+    expect(size.value).toBe("17.5");
+
+    fireEvent.click(interfaceRole.getByRole("checkbox", { name: "Line height" }));
+    const lineHeight = interfaceRole.getByRole("spinbutton", { name: "Line height value" }) as HTMLInputElement;
+    fireEvent.change(lineHeight, { target: { value: "1.634" } });
+    fireEvent.blur(lineHeight);
+    expect(lineHeight.value).toBe("1.63");
+    slot.lifecycle.unmount();
+  });
+
+  it("reports revoked permission as denied rather than policy blocked", async () => {
+    saveCatalog({ version: 1, scannedAt: 1, families: [{ family: "Inter", styles: ["Regular"] }] });
+    const status = {
+      state: "denied" as PermissionState,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: { query: vi.fn(async () => status) },
+    });
+    const app = await loadPluginApp(() => import("./app"));
+    const slot = renderSlot(app.settingsSections[0]!, {});
+    expect(await slot.findByText("Font access denied")).toBeTruthy();
+    expect(localStorage.getItem(CATALOG_STORAGE_KEY)).toBeNull();
+    slot.lifecycle.unmount();
+  });
 });

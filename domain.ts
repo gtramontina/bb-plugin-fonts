@@ -79,6 +79,10 @@ const numberBounds = {
   letterSpacing: [-0.1, 0.2, 0.005],
 } as const;
 
+export function snapToStep(value: number, step: number) {
+  return Number((Math.round(value / step) * step).toFixed(3));
+}
+
 function normalizeNumber(
   value: unknown,
   key: keyof typeof numberBounds,
@@ -87,7 +91,7 @@ function normalizeNumber(
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const [minimum, maximum, step] = numberBounds[key];
   if (value < minimum || value > maximum) return null;
-  return Number((Math.round(value / step) * step).toFixed(3));
+  return snapToStep(value, step);
 }
 
 function normalizeRole(value: unknown): RoleConfig {

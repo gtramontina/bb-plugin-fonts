@@ -28,8 +28,17 @@ function readJson(storage: StorageLike, key: string): unknown {
 
 export function loadConfig(storage: StorageLike = localStorage): FontsConfig {
   const current = readJson(storage, CONFIG_STORAGE_KEY);
-  const value = current ?? readJson(storage, LEGACY_CONFIG_STORAGE_KEY);
-  return value === null ? normalizeConfig(DEFAULT_CONFIG) : normalizeConfig(value);
+  if (current !== null) return normalizeConfig(current);
+  const legacy = readJson(storage, LEGACY_CONFIG_STORAGE_KEY);
+  if (legacy === null) return normalizeConfig(DEFAULT_CONFIG);
+  const migrated = normalizeConfig(legacy);
+  try {
+    storage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(migrated));
+    storage.removeItem?.(LEGACY_CONFIG_STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
+  return migrated;
 }
 
 export function saveConfig(config: FontsConfig, storage: StorageLike = localStorage) {

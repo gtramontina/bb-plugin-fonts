@@ -69,8 +69,8 @@ function fontAccessCopy(state: FontAccessState, desktop: boolean) {
 }
 
 function FontsSettings() {
-  const [saved, setSaved] = useState<FontsConfig>(() => loadConfig());
-  const [draft, setDraft] = useState<FontsConfig>(() => loadConfig());
+  const [saved, setSaved] = useState<FontsConfig>(loadConfig);
+  const [draft, setDraft] = useState<FontsConfig>(saved);
   const [catalog, setCatalog] = useState<FontCatalog | null>(() => loadCatalog());
   const [resolved, setResolved] = useState<ResolvedRoles | null>(null);
   const [status, setStatus] = useState("");
@@ -106,7 +106,7 @@ function FontsSettings() {
       if (permission === "denied" || permission === "prompt") {
         clearCatalog();
         setCatalog(null);
-        setFontAccessState(permission === "denied" ? "blocked" : getFontAccessState());
+        setFontAccessState(permission === "denied" ? "denied" : getFontAccessState());
       } else if (permission === "granted" && getFontAccessState() === "available") {
         setFontAccessState("available");
       }

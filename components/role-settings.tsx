@@ -4,6 +4,7 @@ import {
   type FontCatalog,
   type FontStyle,
   type RoleConfig,
+  snapToStep,
   type RoleId,
 } from "../domain";
 import type { ResolvedTypography } from "../client-typography";
@@ -60,7 +61,7 @@ function clamp(value: number, minimum: number, maximum: number) {
 
 function NumberControl({ label, value, resolved, minimum, maximum, step, unit, fallback, disabled = false, onChange }: NumberControlProps) {
   const enabled = value !== null;
-  const activeValue = value ?? clamp(Number.parseFloat(resolved) || fallback, minimum, maximum);
+  const activeValue = value ?? clamp(snapToStep(Number.parseFloat(resolved) || fallback, step), minimum, maximum);
   const [inputValue, setInputValue] = useState(String(activeValue));
 
   useEffect(() => {
@@ -70,8 +71,9 @@ function NumberControl({ label, value, resolved, minimum, maximum, step, unit, f
   const commit = () => {
     const parsed = Number(inputValue);
     if (inputValue.trim() && Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum) {
-      onChange(parsed);
-      setInputValue(String(parsed));
+      const snapped = clamp(snapToStep(parsed, step), minimum, maximum);
+      onChange(snapped);
+      setInputValue(String(snapped));
     } else {
       setInputValue(String(activeValue));
     }
