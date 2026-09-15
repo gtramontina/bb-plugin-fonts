@@ -1,5 +1,7 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useId, useState, type CSSProperties } from "react";
+import * as Popover from "@radix-ui/react-popover";
 import { SelectChevron } from "./font-picker";
+import { keepOpenOnScrollbar } from "./popover-dismiss";
 
 export interface PreviewOption {
   value: string;
@@ -17,19 +19,10 @@ interface PreviewSelectProps {
 
 export function PreviewSelect({ label, value, options, disabled = false, onChange }: PreviewSelectProps) {
   const id = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
   const selected = options[selectedIndex]!;
-
-  useEffect(() => {
-    const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, []);
 
   const choose = (index: number) => {
     const option = options[index];
@@ -40,42 +33,54 @@ export function PreviewSelect({ label, value, options, disabled = false, onChang
   };
 
   return (
-    <div className="fonts-preview-select" ref={rootRef}>
-      <button
-        type="button"
-        className="fonts-select-trigger"
-        role="combobox"
-        aria-label={label}
-        aria-expanded={open}
-        disabled={disabled}
-        aria-controls={`${id}-listbox`}
-        aria-activedescendant={open ? `${id}-option-${activeIndex}` : undefined}
-        onClick={() => {
-          setActiveIndex(selectedIndex);
-          setOpen((current) => !current);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setOpen(true);
-            setActiveIndex((current) => Math.min(options.length - 1, current + 1));
-          } else if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setOpen(true);
-            setActiveIndex((current) => Math.max(0, current - 1));
-          } else if (event.key === "Enter" && open) {
-            event.preventDefault();
-            choose(activeIndex);
-          } else if (event.key === "Escape") {
-            setOpen(false);
-          }
-        }}
-      >
-        <span style={selected.style}>{selected.label}</span>
-        <SelectChevron open={open} />
-      </button>
-      {open && (
-        <div className="fonts-options" id={`${id}-listbox`} role="listbox">
+    <Popover.Root open={open} onOpenChange={(next) => {
+      setOpen(next);
+      if (next) setActiveIndex(selectedIndex);
+    }}>
+      <div className="fonts-preview-select">
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className="fonts-select-trigger"
+            role="combobox"
+            aria-label={label}
+            aria-expanded={open}
+            disabled={disabled}
+            aria-controls={open ? `${id}-listbox` : undefined}
+            aria-activedescendant={open ? `${id}-option-${activeIndex}` : undefined}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setOpen(true);
+                setActiveIndex((current) => Math.min(options.length - 1, current + 1));
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setOpen(true);
+                setActiveIndex((current) => Math.max(0, current - 1));
+              } else if (event.key === "Enter" && open) {
+                event.preventDefault();
+                choose(activeIndex);
+              } else if (event.key === "Escape") {
+                setOpen(false);
+              }
+            }}
+          >
+            <span style={selected.style}>{selected.label}</span>
+            <SelectChevron open={open} />
+          </button>
+        </Popover.Trigger>
+      </div>
+      <Popover.Portal>
+        <Popover.Content
+          className="fonts-options"
+          id={`${id}-listbox`}
+          role="listbox"
+          align="start"
+          sideOffset={4}
+          collisionPadding={12}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onPointerDownOutside={keepOpenOnScrollbar}
+        >
           {options.map((option, index) => (
             <div
               id={`${id}-option-${index}`}
@@ -92,8 +97,8 @@ export function PreviewSelect({ label, value, options, disabled = false, onChang
               {index === selectedIndex && <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3 3 7-7" /></svg>}
             </div>
           ))}
-        </div>
-      )}
-    </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }

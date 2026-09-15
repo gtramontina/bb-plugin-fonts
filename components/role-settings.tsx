@@ -1,9 +1,10 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   DEFAULT_CONFIG,
   type FontCatalog,
   type FontStyle,
   type RoleConfig,
+  snapToStep,
   type RoleId,
 } from "../domain";
 import type { ResolvedTypography } from "../client-typography";
@@ -60,10 +61,22 @@ function clamp(value: number, minimum: number, maximum: number) {
 
 function NumberControl({ label, value, resolved, minimum, maximum, step, unit, fallback, disabled = false, onChange }: NumberControlProps) {
   const enabled = value !== null;
-  const activeValue = value ?? clamp(Number.parseFloat(resolved) || fallback, minimum, maximum);
-  const update = (next: string) => {
-    const parsed = Number(next);
-    if (Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum) onChange(parsed);
+  const activeValue = value ?? clamp(snapToStep(Number.parseFloat(resolved) || fallback, step), minimum, maximum);
+  const [inputValue, setInputValue] = useState(String(activeValue));
+
+  useEffect(() => {
+    setInputValue(String(activeValue));
+  }, [activeValue]);
+
+  const commit = () => {
+    const parsed = Number(inputValue);
+    if (inputValue.trim() && Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum) {
+      const snapped = clamp(snapToStep(parsed, step), minimum, maximum);
+      onChange(snapped);
+      setInputValue(String(snapped));
+    } else {
+      setInputValue(String(activeValue));
+    }
   };
   return (
     <div className="fonts-control">
@@ -75,7 +88,20 @@ function NumberControl({ label, value, resolved, minimum, maximum, step, unit, f
         {!enabled && <span>Theme · {resolved || "inherited"}</span>}
       </div>
       <span className="fonts-number-input" data-disabled={!enabled}>
-        <input aria-label={`${label} value`} type="number" min={minimum} max={maximum} step={step} value={activeValue} disabled={!enabled || disabled} onChange={(event) => update(event.target.value)} />
+        <input
+          aria-label={`${label} value`}
+          type="number"
+          min={minimum}
+          max={maximum}
+          step={step}
+          value={inputValue}
+          disabled={!enabled || disabled}
+          onChange={(event) => setInputValue(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+        />
         <span>{unit}</span>
       </span>
     </div>
@@ -84,7 +110,7 @@ function NumberControl({ label, value, resolved, minimum, maximum, step, unit, f
 
 function previewStyle(role: RoleId, config: RoleConfig, resolved: ResolvedTypography | null): CSSProperties {
   const family = config.family
-    ? `${JSON.stringify(config.family)}, ${roleCopy[role].fallback}`
+    ? `${config.familyKind === "generic" ? config.family : JSON.stringify(config.family)}, ${roleCopy[role].fallback}`
     : resolved?.family ?? `var(--font-${role === "interface" ? "sans" : role === "code" ? "mono" : "serif"})`;
   return {
     fontFamily: family,
@@ -99,7 +125,7 @@ function previewStyle(role: RoleId, config: RoleConfig, resolved: ResolvedTypogr
 export function RoleSettings({ role, config, resolved, catalog, advancedSupported, onChange }: RoleSettingsProps) {
   const copy = roleCopy[role];
   const patch = (value: Partial<RoleConfig>) => onChange({ ...config, ...value });
-  const hasOverrides = Object.values(config).some((value) => value !== null);
+  const hasOverrides = Object.entries(config).some(([key, value]) => key !== "familyKind" && value !== null);
   const weightOptions: PreviewOption[] = [
     { value: "", label: `Theme default · ${resolved?.weight ?? "inherited"}`, style: { fontWeight: resolved?.weight ?? 400 } },
     ...[100, 200, 300, 400, 500, 600, 700, 800, 900].map((weight) => ({
@@ -128,7 +154,7 @@ export function RoleSettings({ role, config, resolved, catalog, advancedSupporte
         {!advancedSupported && role === "interface" && (
           <p className="fonts-compatibility">This BB version does not expose the expected typography scale. Family and style remain available; scale controls are disabled.</p>
         )}
-        <FontPicker role={role} value={config.family} catalog={catalog} onChange={(family) => patch({ family })} />
+        <FontPicker role={role} value={config.family} familyKind={config.familyKind} catalog={catalog} onChange={(family, familyKind) => patch({ family, familyKind })} />
         <div className="fonts-control fonts-control--select">
           <label>Weight</label>
           <PreviewSelect label={`${copy.title} weight`} value={config.weight === null ? "" : String(config.weight)} options={weightOptions} disabled={role === "interface" && !advancedSupported} onChange={(value) => patch({ weight: value ? Number(value) : null })} />
