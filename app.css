@@ -280,7 +280,9 @@
 }
 
 .fonts-options {
-  z-index: 20;
+  /* BB's compact layout puts the page inset at z-index 30, so a lower value
+     paints the portaled list underneath the settings content. */
+  z-index: 50;
   width: var(--radix-popover-trigger-width);
   max-height: 17rem;
   overflow-y: auto;
