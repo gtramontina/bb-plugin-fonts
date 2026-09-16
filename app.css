@@ -502,6 +502,10 @@
   .fonts-number-input input {
     font-size: 16px !important;
   }
+
+  [data-promptbox-editor-content] .ProseMirror[contenteditable] {
+    font-size: max(16px, 1em) !important;
+  }
 }
 
 @container (max-width: 42rem) {
